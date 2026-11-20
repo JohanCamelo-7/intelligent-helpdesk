@@ -1,0 +1,7 @@
+# Solo pyspark va fijo (debe coincidir con los JAR de Iceberg para Spark 4.1).
+# El resto usa mínimos para no chocar con las dependencias que ya trae Airflow 3.3.
+pyspark==4.1.4
+pyyaml>=6.0.3
+boto3>=1.38.0
+holidays>=0.62
+psycopg[binary]>=3.2.9

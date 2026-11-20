@@ -1,0 +1,106 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework
+  error:
+    include-message: never
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: helpdesk-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/helpdesk}
+    username: ${DB_USER:helpdesk}
+    password: ${DB_PASSWORD:cambia-helpdesk-db}
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USER:helpdesk}
+    password: ${RABBITMQ_PASSWORD:cambia-rabbit}
+    publisher-confirm-type: simple
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 2s
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 30MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /api/v1/openapi
+  swagger-ui:
+    path: /api/v1/swagger
+
+helpdesk:
+  jwt:
+    secret: ${JWT_SECRET:cambia-este-secreto-jwt-de-al-menos-32-caracteres}
+    access-ttl-minutes: 15
+    refresh-ttl-days: 7
+  cookie-secure: ${COOKIE_SECURE:false}
+  cors-origins: ${CORS_ORIGINS:http://localhost:8080,http://localhost:4200}
+  service-key: ${SERVICE_KEY:cambia-clave-interna-servicios}
+  admin:
+    email: ${ADMIN_EMAIL:admin@helpdesk.local}
+    password: ${ADMIN_PASSWORD:Admin123!cambia}
+  s3:
+    endpoint: ${S3_ENDPOINT:http://localhost:8333}
+    region: ${S3_REGION:us-east-1}
+    access-key: ${S3_ACCESS_KEY:helpdesk}
+    secret-key: ${S3_SECRET_KEY:cambia-s3-helpdesk}
+    attachments-bucket: helpdesk-attachments
+    reports-bucket: helpdesk-reports
+  attachments:
+    max-files: 5
+    max-bytes: 5242880
+    max-pixels: 40000000
+  clamav:
+    enabled: ${CLAMAV_ENABLED:false}
+    host: ${CLAMAV_HOST:clamav}
+    port: 3310
+  ai:
+    confidence-threshold: ${AI_CONFIDENCE_THRESHOLD:0.75}
+    min-score: 0.60
+  trino:
+    url: ${TRINO_URL:jdbc:trino://localhost:8082/lake}
+    user: analytics
+  airflow:
+    url: ${AIRFLOW_URL:http://localhost:8081}
+    user: ${AIRFLOW_USER:admin}
+    password: ${AIRFLOW_PASSWORD:cambia-airflow-admin}
+  demo-enabled: ${DEMO_ENABLED:false}
+
+logging:
+  pattern:
+    correlation: "[%X{correlationId:-}] "

@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest==8.3.5
+duckdb==2.0.0   # solo pruebas: ejecuta el SQL de las plantillas sobre tablas Gold sintéticas

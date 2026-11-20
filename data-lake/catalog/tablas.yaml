@@ -1,0 +1,129 @@
+# Catálogo de datos del lago: descripción, responsable, sensibilidad, retención y linaje.
+# A partir de este archivo se genera docs/datos/diccionario-de-datos.md (generar_diccionario.py).
+responsable_por_defecto: Equipo de datos (proyecto)
+tablas:
+  bronze.domain_events:
+    capa: Bronze
+    descripcion: Todos los eventos de dominio tal como llegan (sobre + payload JSON original). Solo inserción, sin duplicados por event_id.
+    fuente: landing/events (data-ingestion <- RabbitMQ <- outbox de helpdesk-api y ai-service)
+    particion: ingest_date
+    retencion: 3 años
+    pii: "Sí (payload puede contener identificadores de usuario; no contiene correos ni nombres)"
+    columnas:
+      event_id: UUID del evento (clave de deduplicación)
+      event_type: Tipo de evento (TicketCreated, TicketClosed, AiDiagnosisCompleted...)
+      occurred_at: Momento en que ocurrió el hecho de negocio (UTC)
+      aggregate_id: Identificador del agregado (normalmente el ticket)
+      correlation_id: Identificador de correlación de la petición original
+      source: Servicio emisor
+      payload: JSON original del evento
+      ingested_at: Momento de llegada a Landing
+      landing_key: Archivo de Landing de origen (linaje)
+      ingestion_run_id: Ejecución del pipeline que lo cargó
+  bronze.master_snapshots:
+    capa: Bronze
+    descripcion: Fotos completas por hora de catálogos, usuarios (sin correo ni nombre) y técnicos.
+    fuente: PostgreSQL (rol lake_reader) vía lakehouse.extract
+    particion: entity
+    retencion: 3 años
+    pii: "Bajo (id de usuario, cargo y área)"
+    columnas:
+      entity: Entidad (usuarios, tecnicos, sedes, equipos, categorias, tipos_falla, prioridades, estados)
+      entity_id: Clave natural de la entidad
+      snapshot_run_id: Ejecución de extracción
+      snapshot_ts: Momento de la foto
+      data: Fila original en JSON
+  silver.tickets:
+    capa: Silver
+    descripcion: Estado integrado de cada ticket reconstruido desde los eventos (clasificación vigente, estado, fechas, técnico, reaperturas, encuesta).
+    fuente: bronze.domain_events
+    retencion: 3 años
+    pii: "Seudonimizado (solicitante_hash = SHA-256 con sal)"
+    reglas_calidad: quality/rules.yaml#silver.tickets
+    columnas:
+      ticket_id: Identificador del ticket
+      numero: Número legible (SOP-000123)
+      solicitante_hash: Solicitante seudonimizado
+      categoria_codigo: Categoría vigente (la confirmada al cierre tiene prioridad)
+      tipo_falla_codigo: Tipo de falla vigente
+      prioridad_codigo: Prioridad vigente
+      estado_codigo: Estado vigente
+      tecnico_id: Técnico asignado vigente
+      asignado_por_ia: La primera asignación fue automática
+      requirio_revision: Pasó por revisión humana
+      ia_tipo_falla_propuesto: Tipo de falla propuesto por la IA
+      creado_en / asignado_en / inicio_atencion_en / finalizado_en: Hitos del ciclo de vida (UTC)
+      reaperturas: Veces que se reabrió
+      es_demo: Registro de un escenario de demostración
+  silver.technicians:
+    capa: Silver
+    descripcion: Historial de técnicos (SCD tipo 2) por cambios de nombre, nivel, carga máxima o especialidades.
+    fuente: bronze.master_snapshots
+    pii: "Nombre del técnico (necesario para reportes de rendimiento; visible solo para ADMIN)"
+    columnas:
+      tecnico_id: Identificador
+      nivel: JUNIOR, SEMI_SENIOR o SENIOR
+      especialidades: Códigos de especialidad
+      valido_desde / valido_hasta: Vigencia de la versión
+      es_actual: Versión vigente
+  silver.ai_diagnoses:
+    capa: Silver
+    descripcion: Un registro por diagnóstico de IA (texto o imagen) con confianza y si fue concluyente.
+    fuente: bronze.domain_events (AiDiagnosisCompleted)
+    pii: "No"
+  silver.assignments:
+    capa: Silver
+    descripcion: Asignaciones y reasignaciones con técnico recomendado, asignado, modo y puntajes.
+    fuente: bronze.domain_events (TechnicianAssigned)
+    pii: "No"
+  gold.fact_tickets:
+    capa: Gold
+    descripcion: Hecho principal. Granularidad = un ticket. Medidas de tiempos, reincidencia y efectividad de IA.
+    fuente: silver.tickets, silver.technicians
+    pii: "No (solo claves sustitutas y seudónimos)"
+    consumidores: analytics-service (Trino), reportes
+    columnas:
+      fecha_creacion_key: Clave de DimFecha (yyyymmdd, America/Bogota)
+      min_hasta_asignacion: Minutos entre creación y primera asignación
+      min_hasta_atencion: Minutos entre asignación e inicio de atención
+      min_resolucion: Minutos entre creación y finalización (solo finalizados)
+      es_reincidente: Mismo equipo/solicitante y categoría dentro de 30 días tras un cierre
+      ia_acerto: El tipo propuesto por la IA coincide con el confirmado (null si no aplica)
+      asignacion_efectiva: Asignación automática sin reasignación en un ticket finalizado
+  gold.fact_atenciones:
+    capa: Gold
+    descripcion: Hecho de actividades técnicas. Granularidad = una actividad registrada.
+    fuente: silver.activities
+  gold.fact_asignaciones:
+    capa: Gold
+    descripcion: Hecho de asignaciones. Granularidad = una asignación o reasignación.
+    fuente: silver.assignments
+  gold.fact_diagnosticos_ia:
+    capa: Gold
+    descripcion: Hecho de diagnósticos. Resultado ACERTADO, CORREGIDO, PENDIENTE o NO_CONCLUYENTE.
+    fuente: silver.ai_diagnoses, silver.tickets
+  gold.fact_snapshot_diario:
+    capa: Gold
+    descripcion: Foto diaria de tickets abiertos al final de cada día (evolución de pendientes).
+    fuente: silver.tickets
+  gold.dim_fecha:
+    capa: Gold
+    descripcion: Calendario con semana ISO, día de la semana y festivos de Colombia.
+  gold.dim_tecnico:
+    capa: Gold
+    descripcion: Dimensión de técnicos con historial (SCD2).
+  gold.agg_rendimiento_tecnico:
+    capa: Gold
+    descripcion: Desempeño por técnico y categoría en 90 días (insumo D del algoritmo de asignación).
+  ops.pipeline_runs:
+    capa: Ops
+    descripcion: Registro de cada paso del pipeline (estado, filas leídas, escritas y rechazadas, mensaje).
+  ops.dq_results:
+    capa: Ops
+    descripcion: Resultado de cada regla de calidad y de la reconciliación diaria.
+  ops.lineage:
+    capa: Ops
+    descripcion: Linaje por ejecución (tabla origen -> tabla destino, filas).
+  ops.quarantine_rows:
+    capa: Ops
+    descripcion: Registros rechazados por formato o por reglas críticas, con la regla incumplida.

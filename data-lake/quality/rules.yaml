@@ -1,0 +1,60 @@
+# Reglas de calidad de datos.
+#  row_rules   : expresión SQL que cada fila debe cumplir. Las filas que fallan una regla
+#                "critical" van a ops.quarantine_rows y no pasan a la tabla; las "warning" pasan
+#                pero quedan contadas en ops.dq_results.
+#  table_rules : unique (columnas sin duplicados) y max_rejected_ratio (proporción máxima de
+#                filas en cuarentena). Si una regla de tabla "critical" falla, el paso se detiene
+#                y la capa Gold NO se publica.
+tables:
+  silver.tickets:
+    row_rules:
+      - {name: ticket_id_no_nulo, expr: "ticket_id IS NOT NULL", severity: critical}
+      - {name: creado_en_no_nulo, expr: "creado_en IS NOT NULL", severity: critical}
+      - {name: estado_valido, expr: "estado_codigo IN ('PENDIENTE','EN_CURSO','FINALIZADA','CANCELADA')", severity: critical}
+      - {name: prioridad_valida, expr: "prioridad_codigo IN ('BAJA','MEDIA','ALTA','CRITICA')", severity: critical}
+      - {name: cierre_posterior_a_creacion, expr: "finalizado_en IS NULL OR finalizado_en >= creado_en", severity: critical}
+      - {name: finalizado_con_fecha, expr: "estado_codigo <> 'FINALIZADA' OR finalizado_en IS NOT NULL", severity: warning}
+      - {name: finalizado_con_tipo_falla, expr: "estado_codigo <> 'FINALIZADA' OR tipo_falla_codigo IS NOT NULL", severity: warning}
+      - {name: en_curso_con_tecnico, expr: "estado_codigo <> 'EN_CURSO' OR tecnico_id IS NOT NULL", severity: warning}
+      - {name: sede_informada, expr: "sede_codigo IS NOT NULL", severity: warning}
+    table_rules:
+      - {name: ticket_id_unico, type: unique, columns: [ticket_id], severity: critical}
+      - {name: rechazo_maximo_5pct, type: max_rejected_ratio, value: 0.05, severity: critical}
+
+  silver.ticket_status_history:
+    row_rules:
+      - {name: transicion_con_estados, expr: "estado_anterior IS NOT NULL AND estado_nuevo IS NOT NULL", severity: critical}
+      - {name: fecha_cambio, expr: "cambiado_en IS NOT NULL", severity: critical}
+    table_rules:
+      - {name: evento_unico, type: unique, columns: [event_id], severity: critical}
+
+  silver.assignments:
+    row_rules:
+      - {name: modo_valido, expr: "modo IN ('AUTO','MANUAL')", severity: critical}
+      - {name: tecnico_asignado, expr: "tecnico_asignado_id IS NOT NULL", severity: critical}
+      - {name: puntaje_en_rango, expr: "puntaje_asignado IS NULL OR (puntaje_asignado BETWEEN 0 AND 1)", severity: warning}
+    table_rules:
+      - {name: asignacion_unica, type: unique, columns: [asignacion_id], severity: critical}
+
+  silver.activities:
+    row_rules:
+      - {name: minutos_en_rango, expr: "minutos BETWEEN 0 AND 1440", severity: critical}
+      - {name: tipo_valido, expr: "tipo IN ('DIAGNOSTICO','REPARACION','OBSERVACION','SEGUIMIENTO','SOLUCION')", severity: warning}
+
+  silver.surveys:
+    row_rules:
+      - {name: calificacion_1_a_5, expr: "calificacion BETWEEN 1 AND 5", severity: critical}
+    table_rules:
+      - {name: una_por_ticket, type: unique, columns: [ticket_id], severity: critical}
+
+  silver.ai_diagnoses:
+    row_rules:
+      - {name: confianza_0_a_1, expr: "confianza BETWEEN 0 AND 1", severity: critical}
+      - {name: origen_valido, expr: "origen IN ('TEXTO','IMAGEN')", severity: critical}
+      - {name: concluyente_con_categoria, expr: "NOT concluyente OR categoria_propuesta IS NOT NULL", severity: warning}
+
+  silver.technicians:
+    row_rules:
+      - {name: nivel_valido, expr: "nivel IN ('JUNIOR','SEMI_SENIOR','SENIOR')", severity: critical}
+    table_rules:
+      - {name: una_version_por_inicio, type: unique, columns: [tecnico_id, valido_desde], severity: critical}

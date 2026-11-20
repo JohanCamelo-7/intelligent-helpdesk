@@ -1,0 +1,25 @@
+# Alternativa: túnel con nombre configurado LOCALMENTE (reglas versionadas como código).
+# La opción recomendada para el proyecto es el túnel administrado desde el panel
+# de Cloudflare Zero Trust con TUNNEL_TOKEN (ver docs/despliegue/cloudflare-tunnel.md).
+#
+# Para usar este archivo:
+#   1. cloudflared tunnel login
+#   2. cloudflared tunnel create helpdesk           -> genera <UUID>.json
+#   3. cloudflared tunnel route dns helpdesk soporte.midominio.com
+#   4. cloudflared tunnel route dns helpdesk datos.midominio.com
+#   5. Copia este archivo a config.yml y el JSON de credenciales a esta carpeta.
+#   6. En docker-compose cambia el comando de cloudflared por:
+#        tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+tunnel: helpdesk
+credentials-file: /etc/cloudflared/<UUID-DEL-TUNEL>.json
+metrics: 0.0.0.0:2000
+
+ingress:
+  # Aplicación y API (mismo origen: /api)
+  - hostname: soporte.midominio.com
+    service: http://nginx:80
+  # Airflow, protegido además con Cloudflare Access
+  - hostname: datos.midominio.com
+    service: http://airflow:8080
+  # Regla final obligatoria
+  - service: http_status:404

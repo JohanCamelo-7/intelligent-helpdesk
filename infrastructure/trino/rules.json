@@ -1,0 +1,16 @@
+{
+  "catalogs": [
+    { "user": "analytics", "catalog": "lake", "allow": "read-only" },
+    { "user": "analytics", "catalog": "system", "allow": "read-only" },
+    { "user": "admin", "catalog": ".*", "allow": "all" },
+    { "catalog": ".*", "allow": "none" }
+  ],
+  "schemas": [
+    { "user": "analytics", "catalog": "lake", "schema": "(gold|ops)", "owner": false },
+    { "user": "admin", "schema": ".*", "owner": true }
+  ],
+  "tables": [
+    { "user": "analytics", "catalog": "lake", "schema": "(gold|ops)", "privileges": ["SELECT"] },
+    { "user": "admin", "privileges": ["SELECT", "INSERT", "DELETE", "UPDATE", "OWNERSHIP"] }
+  ]
+}

@@ -1,0 +1,42 @@
+# Secretos y datos personales: NUNCA al repositorio
+.env
+.env.*
+!.env.example
+usuarios-y-contrasenas.csv
+*.pem
+*.key
+infrastructure/cloudflared/*.json
+!infrastructure/cloudflared/config.example.yml
+
+# Resultados locales de las pruebas (copiar los valores al informe)
+pruebas/resultados/
+
+# Java
+target/
+*.class
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Spark / Data Lake locales
+spark-warehouse/
+metastore_db/
+derby.log
+data-lake/.lake/
+
+# Editores y sistema
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.zip
